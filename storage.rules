@@ -1,0 +1,58 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*') &&
+             request.resource.size < 5 * 1024 * 1024; // 5MB limit
+    }
+    
+    function isValidFileType() {
+      return request.resource.contentType.matches('image/.*') ||
+             request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('text/.*');
+    }
+    
+    // User profile images
+    match /users/{userId}/profile/{fileName} {
+      allow read: if true; // Public read access for profile images
+      allow write: if isOwner(userId) && isValidImage();
+    }
+    
+    // Item images
+    match /items/{userId}/{fileName} {
+      allow read: if true; // Public read access for item images
+      allow write: if isAuthenticated() && isValidImage();
+    }
+    
+    // Chat attachments
+    match /conversations/{conversationId}/attachments/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidFileType();
+    }
+    
+    // System images (logos, banners, etc.)
+    match /system/{fileName} {
+      allow read: if true;
+      allow write: if false; // Only admin can upload system images
+    }
+    
+    // Temporary uploads
+    match /temp/{userId}/{fileName} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // Default rule - deny all
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+} 
